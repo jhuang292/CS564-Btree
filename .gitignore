@@ -1,0 +1,5 @@
+.*sw*
+obj/*
+lib/*
+relA*
+badgerdb_main
