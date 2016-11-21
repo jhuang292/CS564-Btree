@@ -379,6 +379,7 @@ class BTreeIndex {
 	const bool _leafIsFull(LeafNodeInt *);
 	const bool _nonLeafIsFull(NonLeafNodeInt *);
 	const void _leafInsertEntry(LeafNodeInt *node, const void *key, const RecordId rid);
+	const void _nonLeafInsertEntry(NonLeafNodeInt *node, const PageKeyPair<int>);
 	
 	LeafNodeInt *_newLeafNode();
 	NonLeafNodeInt *_newNonLeafNode();
@@ -392,6 +393,7 @@ class BTreeIndex {
 	const void _testGetRIDKeyPair();
 	const void _testNewPageIsConsistent();
 	const void _testLeafInsertEntry();
+	const void _testNonLeafInsertEntry();
 	
 };
 

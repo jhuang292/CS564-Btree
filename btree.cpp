@@ -147,16 +147,18 @@ namespace badgerdb
 
 	const bool BTreeIndex::_leafIsFull(LeafNodeInt *node)
 	{
-		return node->keyArray[INTARRAYLEAFSIZE - 1] == EMPTY_SLOT;
+		return node->keyArray[INTARRAYLEAFSIZE - 1] != EMPTY_SLOT;
 	}
 
 	const bool BTreeIndex::_nonLeafIsFull(NonLeafNodeInt *node)
 	{
-		return node->keyArray[INTARRAYNONLEAFSIZE - 1] == EMPTY_SLOT;
+		return node->keyArray[INTARRAYNONLEAFSIZE - 1] != EMPTY_SLOT;
 	}
 
 	const void BTreeIndex::_leafInsertEntry(LeafNodeInt *node, const void *key, const RecordId rid)
 	{
+		assert(!_leafIsFull(node));
+
 		int ikey = *((int *)key);
 		//assert(ikey >= node->keyArray[0]);
 
@@ -184,6 +186,36 @@ namespace badgerdb
 			}
 		}
 		_assertLeafInternalConsistency(node);
+	}
+
+	const void BTreeIndex::_nonLeafInsertEntry(NonLeafNodeInt *node, const PageKeyPair<int> pair)
+	{
+		assert(!_nonLeafIsFull(node));
+
+		int emptySlotIdx = -1;
+		for (int i = 0; i < INTARRAYNONLEAFSIZE; i++) {
+			if (node->keyArray[i] == EMPTY_SLOT) {
+				emptySlotIdx = i;
+				break;
+			}
+		}
+		
+		for (int i = emptySlotIdx; i >= 0; i--) {
+			if (i == 0) {
+				node->keyArray[0] = pair.key;
+				node->pageNoArray[1] = pair.pageNo;
+			} else {
+				if (node->keyArray[i-1] > pair.key) {
+					node->keyArray[i] = node->keyArray[i-1];
+					node->pageNoArray[i+1] = node->pageNoArray[i];
+				} else {
+					node->keyArray[i] = pair.key;
+					node->pageNoArray[i+1] = pair.pageNo;
+					break;
+				}
+			}
+		}
+		_assertNonLeafInternalConsistency(node);
 	}
 
 	// -----------------------------------------------------------------------------
@@ -273,6 +305,7 @@ namespace badgerdb
 		_testGetRIDKeyPair();
 		_testNewPageIsConsistent();
 		_testLeafInsertEntry();
+		_testNonLeafInsertEntry();
 	}
 
 	const void BTreeIndex::_testValidateMetaPage()
@@ -356,5 +389,29 @@ namespace badgerdb
 			free(node);
 		}
 		std::cout << "test lead insert entry passes" << std::endl;
+	}
+
+	const void BTreeIndex::_testNonLeafInsertEntry()
+	{
+		{
+			NonLeafNodeInt *node = _newNonLeafNode();
+			node->pageNoArray[0] = 987;
+			PageKeyPair<int> p1, p2, p3, p4;
+			p1.set(1, 1);
+			p2.set(2, 2);
+			p3.set(3, 3);
+			p4.set(4, 4);
+			_nonLeafInsertEntry(node, p2);
+			_nonLeafInsertEntry(node, p1);
+			_nonLeafInsertEntry(node, p4);
+			_nonLeafInsertEntry(node, p3);
+			assert(node->pageNoArray[0] == 987);
+			for (int i = 0; i < 4; i++) {
+				assert(node->keyArray[i] == i+1);
+				assert(node->pageNoArray[i+1] == PageId(i+1));
+			}
+			free(node);
+		}
+		std::cout << "test non leaf insert entry passes" << std::endl;
 	}
 }
