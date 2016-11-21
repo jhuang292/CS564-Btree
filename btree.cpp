@@ -155,6 +155,37 @@ namespace badgerdb
 		return node->keyArray[INTARRAYNONLEAFSIZE - 1] == EMPTY_SLOT;
 	}
 
+	const void BTreeIndex::_leafInsertEntry(LeafNodeInt *node, const void *key, const RecordId rid)
+	{
+		int ikey = *((int *)key);
+		//assert(ikey >= node->keyArray[0]);
+
+		int emptySlotIdx = -1;
+		for (int i = 0; i < INTARRAYLEAFSIZE; i++) {
+			if (node->keyArray[i] == EMPTY_SLOT) {
+				emptySlotIdx = i;
+				break;
+			}
+		}
+
+		for (int i = emptySlotIdx; i >= 0; i--) {
+			if (i == 0) {
+				node->keyArray[0] = ikey;
+				node->ridArray[0] = rid;
+			} else {
+				if (node->keyArray[i-1] > ikey) {
+					node->keyArray[i] = node->keyArray[i-1];
+					node->ridArray[i] = node->ridArray[i-1];
+				} else {
+					node->keyArray[i] = ikey;
+					node->ridArray[i] = rid;
+					break;
+				}
+			}
+		}
+		_assertLeafInternalConsistency(node);
+	}
+
 	// -----------------------------------------------------------------------------
 	// BTreeIndex::startScan
 	// -----------------------------------------------------------------------------
@@ -241,6 +272,7 @@ namespace badgerdb
 		_testValidateMetaPage();
 		_testGetRIDKeyPair();
 		_testNewPageIsConsistent();
+		_testLeafInsertEntry();
 	}
 
 	const void BTreeIndex::_testValidateMetaPage()
@@ -305,5 +337,24 @@ namespace badgerdb
 			free(n);
 		}
 		std::cout << "test new node is consistent passed" << std::endl;
+	}
+
+	const void BTreeIndex::_testLeafInsertEntry()
+	{
+		{
+			LeafNodeInt *node = _newLeafNode();
+			int k1 = 1, k2 = 2, k3 = 3, k4 = 4;
+			RecordId r1 = {1,1}, r2 = {1,2}, r3 = {1,3}, r4 = {1,4};
+			_leafInsertEntry(node, &k2, r2);
+			_leafInsertEntry(node, &k1, r1);
+			_leafInsertEntry(node, &k4, r4);
+			_leafInsertEntry(node, &k3, r3);
+			for (int i = 0; i < 4; i++) {
+				assert(node->keyArray[i] == i+1);
+				assert(node->ridArray[i].slot_number == i+1);
+			}
+			free(node);
+		}
+		std::cout << "test lead insert entry passes" << std::endl;
 	}
 }
