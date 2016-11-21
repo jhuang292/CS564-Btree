@@ -376,11 +376,20 @@ class BTreeIndex {
 	**/
 	const bool _validateMetaPage(IndexMetaInfo *, std::string, int, int);
 	const RIDKeyPair<int> _getRIDKeyPairFromRecord(std::string, RecordId, int);
+	const bool _leafIsFull(LeafNodeInt *);
+	const bool _nonLeafIsFull(NonLeafNodeInt *);
+	
+	LeafNodeInt *_newLeafNode();
+	NonLeafNodeInt *_newNonLeafNode();
+
+	const void _assertLeafInternalConsistency(LeafNodeInt *);
+	const void _assertNonLeafInternalConsistency(NonLeafNodeInt *);
   /**
 	 * Internal unit tests
 	**/
 	const void _testValidateMetaPage();
 	const void _testGetRIDKeyPair();
+	const void _testNewPageIsConsistent();
 	
 };
 

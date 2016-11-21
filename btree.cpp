@@ -17,6 +17,7 @@
 #include "exceptions/file_not_found_exception.h"
 #include "exceptions/end_of_file_exception.h"
 
+#define EMPTY_SLOT (-1)
 
 //#define DEBUG
 
@@ -144,6 +145,16 @@ namespace badgerdb
 
 	}
 
+	const bool BTreeIndex::_leafIsFull(LeafNodeInt *node)
+	{
+		return node->keyArray[INTARRAYLEAFSIZE - 1] == EMPTY_SLOT;
+	}
+
+	const bool BTreeIndex::_nonLeafIsFull(NonLeafNodeInt *node)
+	{
+		return node->keyArray[INTARRAYNONLEAFSIZE - 1] == EMPTY_SLOT;
+	}
+
 	// -----------------------------------------------------------------------------
 	// BTreeIndex::startScan
 	// -----------------------------------------------------------------------------
@@ -174,10 +185,62 @@ namespace badgerdb
 
 	}
 
+	const void BTreeIndex::_assertLeafInternalConsistency(LeafNodeInt *node)
+	{
+		for (int i = 0; i < INTARRAYLEAFSIZE; i++)
+		{
+			if (node->keyArray[i] == EMPTY_SLOT) {
+				assert(node->ridArray[i].page_number == (PageId)EMPTY_SLOT);
+				assert(node->ridArray[i].slot_number == (SlotId)EMPTY_SLOT);
+			} else {
+				assert(node->ridArray[i].page_number != (PageId)EMPTY_SLOT);
+				assert(node->ridArray[i].slot_number != (SlotId)EMPTY_SLOT);
+			}
+		}
+	}
+
+	const void BTreeIndex::_assertNonLeafInternalConsistency(NonLeafNodeInt *node)
+	{
+		assert(node->level == 0 || node->level == 1);
+		for (int i = 0; i < INTARRAYNONLEAFSIZE; i++)
+		{
+			if (node->keyArray[i] == EMPTY_SLOT) {
+				assert(node->pageNoArray[i+1] == (PageId)EMPTY_SLOT);
+			} else {
+				assert(node->pageNoArray[i+1] != (PageId)EMPTY_SLOT);
+			}
+		}
+	}
+
+	LeafNodeInt *BTreeIndex::_newLeafNode()
+	{
+		LeafNodeInt *node = (LeafNodeInt *)malloc(sizeof(LeafNodeInt));
+		node -> rightSibPageNo = EMPTY_SLOT;
+		for (int i = 0; i < INTARRAYLEAFSIZE; i++) {
+			node->keyArray[i] = EMPTY_SLOT;
+			node->ridArray[i].page_number = (PageId)EMPTY_SLOT;
+			node->ridArray[i].slot_number = (SlotId)EMPTY_SLOT;
+		}
+		return node;
+	}
+
+	NonLeafNodeInt *BTreeIndex::_newNonLeafNode()
+	{
+		NonLeafNodeInt *node = (NonLeafNodeInt *)malloc(sizeof(NonLeafNodeInt));
+		node -> level = 0;
+		for (int i = 0; i < INTARRAYNONLEAFSIZE; i++) {
+			node->keyArray[i] = (PageId)EMPTY_SLOT;
+			node->pageNoArray[i] = (PageId)EMPTY_SLOT;
+		}
+		node->pageNoArray[INTARRAYNONLEAFSIZE] = (PageId)EMPTY_SLOT;
+		return node;
+	}
+
 	const void BTreeIndex::_internalTest()
 	{
 		_testValidateMetaPage();
 		_testGetRIDKeyPair();
+		_testNewPageIsConsistent();
 	}
 
 	const void BTreeIndex::_testValidateMetaPage()
@@ -229,4 +292,18 @@ namespace badgerdb
 		std::cout << "test get rid key pair passes" << std::endl;
 	}
 
+	const void BTreeIndex::_testNewPageIsConsistent()
+	{
+		{
+			LeafNodeInt *ln = _newLeafNode();
+			_assertLeafInternalConsistency(ln);
+			free(ln);
+		}
+		{
+			NonLeafNodeInt *n = _newNonLeafNode();
+			_assertNonLeafInternalConsistency(n);
+			free(n);
+		}
+		std::cout << "test new node is consistent passed" << std::endl;
+	}
 }
