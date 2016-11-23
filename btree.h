@@ -1,6 +1,5 @@
 /**
- * @author See Contributors.txt for code contributors and overview of BadgerDB.
- *
+ * @author See Contributors.txt for code contributors and overview of BadgerDB.  *
  * @section LICENSE
  * Copyright (c) 2012 Database Group, Computer Sciences Department, University of Wisconsin-Madison.
  */
@@ -83,6 +82,20 @@ public:
 	{
 		pageNo = p;
 		key = k;
+	}
+};
+
+/**
+ * @brief simple pair of page id and the page pointer
+*/
+class PageIDPair{
+public:
+	Page *page;
+	PageId pageNo;
+	void set(Page *p, PageId n)
+	{
+		page = p;
+		pageNo = n;
 	}
 };
 
@@ -378,11 +391,12 @@ class BTreeIndex {
 	const RIDKeyPair<int> _getRIDKeyPairFromRecord(std::string, RecordId, int);
 	const bool _leafIsFull(LeafNodeInt *);
 	const bool _nonLeafIsFull(NonLeafNodeInt *);
-	const void _leafInsertEntry(LeafNodeInt *node, const void *key, const RecordId rid);
+	const void _leafInsertEntry(LeafNodeInt *node, const void *key,  RecordId rid);
 	const void _nonLeafInsertEntry(NonLeafNodeInt *node, const PageKeyPair<int>);
+	const PageKeyPair<int> _leafSplitInsertEntry(LeafNodeInt *node, const void *key, const RecordId rid);
 	
-	LeafNodeInt *_newLeafNode();
-	NonLeafNodeInt *_newNonLeafNode();
+	PageIDPair _newLeafNode();
+	PageIDPair _newNonLeafNode();
 
 	const void _assertLeafInternalConsistency(LeafNodeInt *);
 	const void _assertNonLeafInternalConsistency(NonLeafNodeInt *);
@@ -394,6 +408,8 @@ class BTreeIndex {
 	const void _testNewPageIsConsistent();
 	const void _testLeafInsertEntry();
 	const void _testNonLeafInsertEntry();
+	const void _testLeafSplitInsertEntry();
+	
 	
 };
 

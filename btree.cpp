@@ -218,6 +218,44 @@ namespace badgerdb
 		_assertNonLeafInternalConsistency(node);
 	}
 
+	const PageKeyPair<int> BTreeIndex::_leafSplitInsertEntry(LeafNodeInt *node, const void *key,  RecordId rid) {
+		assert(_leafIsFull(node));
+		int half = (INTARRAYLEAFSIZE  + 1)/ 2;
+		PageIDPair newLeaf =_newLeafNode();
+		LeafNodeInt *newNode = reinterpret_cast<LeafNodeInt *>(newLeaf.page);
+
+		int ikey = *((int *)key);
+
+		bool insertLeft = false;
+		if (ikey < node->keyArray[half])
+		{
+			insertLeft = true;
+			half = half - 1;
+		}
+
+		for (int i = half; i < INTARRAYLEAFSIZE; i++)
+		{
+			newNode->keyArray[i - half] = node->keyArray[i];
+			newNode->ridArray[i - half] = node->ridArray[i];
+			node->keyArray[i] = EMPTY_SLOT;
+			node->ridArray[i].page_number = (PageId) EMPTY_SLOT;
+			node->ridArray[i].slot_number = (SlotId) EMPTY_SLOT;
+		}
+		if (insertLeft) 
+		{
+			_leafInsertEntry(node, key, rid);
+
+		} else {	
+			_leafInsertEntry(newNode, key, rid);
+		}	
+		PageKeyPair<int> newPair;
+		newPair.set(newLeaf.pageNo, newNode->keyArray[0]); 
+		newNode->rightSibPageNo = node->rightSibPageNo;
+		node->rightSibPageNo = newLeaf.pageNo;
+		bufMgr->unPinPage(file, newPair.pageNo, true);
+		return newPair;
+	}
+
 	// -----------------------------------------------------------------------------
 	// BTreeIndex::startScan
 	// -----------------------------------------------------------------------------
@@ -275,28 +313,44 @@ namespace badgerdb
 		}
 	}
 
-	LeafNodeInt *BTreeIndex::_newLeafNode()
+	PageIDPair BTreeIndex::_newLeafNode()
 	{
-		LeafNodeInt *node = (LeafNodeInt *)malloc(sizeof(LeafNodeInt));
+		PageId pid;
+		Page *page;
+		bufMgr->allocPage(file, pid, page);
+
+		LeafNodeInt *node = reinterpret_cast<LeafNodeInt *>(page);
+
 		node -> rightSibPageNo = EMPTY_SLOT;
 		for (int i = 0; i < INTARRAYLEAFSIZE; i++) {
 			node->keyArray[i] = EMPTY_SLOT;
 			node->ridArray[i].page_number = (PageId)EMPTY_SLOT;
 			node->ridArray[i].slot_number = (SlotId)EMPTY_SLOT;
 		}
-		return node;
+		
+		PageIDPair pair;
+		pair.set(page, pid);
+		return pair;
 	}
 
-	NonLeafNodeInt *BTreeIndex::_newNonLeafNode()
+	PageIDPair BTreeIndex::_newNonLeafNode()
 	{
-		NonLeafNodeInt *node = (NonLeafNodeInt *)malloc(sizeof(NonLeafNodeInt));
+		PageId pid;
+		Page *page;
+		bufMgr->allocPage(file, pid, page);
+
+		NonLeafNodeInt *node = reinterpret_cast<NonLeafNodeInt *>(page);
+
 		node -> level = 0;
 		for (int i = 0; i < INTARRAYNONLEAFSIZE; i++) {
 			node->keyArray[i] = (PageId)EMPTY_SLOT;
 			node->pageNoArray[i] = (PageId)EMPTY_SLOT;
 		}
 		node->pageNoArray[INTARRAYNONLEAFSIZE] = (PageId)EMPTY_SLOT;
-		return node;
+
+		PageIDPair pair;
+		pair.set(page, pid);
+		return pair;
 	}
 
 	const void BTreeIndex::_internalTest()
@@ -306,6 +360,7 @@ namespace badgerdb
 		_testNewPageIsConsistent();
 		_testLeafInsertEntry();
 		_testNonLeafInsertEntry();
+		_testLeafSplitInsertEntry();
 	}
 
 	const void BTreeIndex::_testValidateMetaPage()
@@ -360,14 +415,14 @@ namespace badgerdb
 	const void BTreeIndex::_testNewPageIsConsistent()
 	{
 		{
-			LeafNodeInt *ln = _newLeafNode();
-			_assertLeafInternalConsistency(ln);
-			free(ln);
+			PageIDPair pair = _newLeafNode();
+			_assertLeafInternalConsistency(reinterpret_cast<LeafNodeInt *>(pair.page));
+			bufMgr->unPinPage(file, pair.pageNo, false);
 		}
 		{
-			NonLeafNodeInt *n = _newNonLeafNode();
-			_assertNonLeafInternalConsistency(n);
-			free(n);
+			PageIDPair pair = _newNonLeafNode();
+			_assertNonLeafInternalConsistency(reinterpret_cast<NonLeafNodeInt *>(pair.page));
+			bufMgr->unPinPage(file, pair.pageNo, false);
 		}
 		std::cout << "test new node is consistent passed" << std::endl;
 	}
@@ -375,7 +430,8 @@ namespace badgerdb
 	const void BTreeIndex::_testLeafInsertEntry()
 	{
 		{
-			LeafNodeInt *node = _newLeafNode();
+			PageIDPair pair = _newLeafNode();
+			LeafNodeInt *node = reinterpret_cast<LeafNodeInt *>(pair.page);
 			int k1 = 1, k2 = 2, k3 = 3, k4 = 4;
 			RecordId r1 = {1,1}, r2 = {1,2}, r3 = {1,3}, r4 = {1,4};
 			_leafInsertEntry(node, &k2, r2);
@@ -386,7 +442,7 @@ namespace badgerdb
 				assert(node->keyArray[i] == i+1);
 				assert(node->ridArray[i].slot_number == i+1);
 			}
-			free(node);
+			bufMgr->unPinPage(file, pair.pageNo, false);
 		}
 		std::cout << "test lead insert entry passes" << std::endl;
 	}
@@ -394,7 +450,8 @@ namespace badgerdb
 	const void BTreeIndex::_testNonLeafInsertEntry()
 	{
 		{
-			NonLeafNodeInt *node = _newNonLeafNode();
+			PageIDPair pair = _newNonLeafNode();
+			NonLeafNodeInt *node = reinterpret_cast<NonLeafNodeInt *>(pair.page);
 			node->pageNoArray[0] = 987;
 			PageKeyPair<int> p1, p2, p3, p4;
 			p1.set(1, 1);
@@ -410,8 +467,170 @@ namespace badgerdb
 				assert(node->keyArray[i] == i+1);
 				assert(node->pageNoArray[i+1] == PageId(i+1));
 			}
-			free(node);
+			bufMgr->unPinPage(file, pair.pageNo, false);
 		}
 		std::cout << "test non leaf insert entry passes" << std::endl;
+	}
+
+	const void BTreeIndex::_testLeafSplitInsertEntry()	{
+		{
+			PageIDPair pair = _newLeafNode();
+			LeafNodeInt *node = reinterpret_cast<LeafNodeInt *>(pair.page);
+			node->rightSibPageNo = 756;
+			for (int i = 0; i < INTARRAYLEAFSIZE; i++) {
+				node->keyArray[i] = i + 1;
+				node->ridArray[i] = {1, (SlotId) (i + 1)};
+			}
+			int k1 = 1;
+			RecordId r1 = {1,1};
+			PageKeyPair<int> newNode = _leafSplitInsertEntry(node, &k1, r1);
+			assert(node->keyArray[0] == 1);
+			for (int i = 1; i < INTARRAYLEAFSIZE / 2;  i++) {
+				assert(node->keyArray[i] == i);
+				assert(node->ridArray[i].slot_number == i);
+			}
+
+			for (int i = INTARRAYLEAFSIZE / 2;  i < INTARRAYLEAFSIZE; i++) {
+				assert(node->keyArray[i] == -1);
+				assert(node->ridArray[i].slot_number == (SlotId) -1);
+			}
+			Page* page;
+			bufMgr->readPage(file, newNode.pageNo, page);
+			LeafNodeInt *newNode1 = reinterpret_cast<LeafNodeInt *>(page);
+			for (int i = 0; i <= INTARRAYLEAFSIZE / 2;  i++) {
+				assert(newNode1->keyArray[i] == INTARRAYLEAFSIZE / 2 + i);
+				assert(newNode1->ridArray[i].slot_number == INTARRAYLEAFSIZE / 2 + i);
+			}
+
+			for (int i = INTARRAYLEAFSIZE / 2 + 1;  i < INTARRAYLEAFSIZE; i++) {
+				assert(newNode1->keyArray[i] == -1);
+				assert(newNode1->ridArray[i].slot_number == (SlotId) -1);
+			}
+		
+			assert(node->rightSibPageNo == newNode.pageNo);
+			assert(newNode1->rightSibPageNo == 756);
+			bufMgr->unPinPage(file, pair.pageNo, false);
+			bufMgr->unPinPage(file, newNode.pageNo, false);
+		}
+
+		{
+			PageIDPair pair = _newLeafNode();
+			LeafNodeInt *node = reinterpret_cast<LeafNodeInt *>(pair.page);
+			node->rightSibPageNo = 756;
+			for (int i = 0; i < INTARRAYLEAFSIZE; i++) {
+				node->keyArray[i] = i + 1;
+				node->ridArray[i] = {1, (SlotId) (i + 1)};
+			}
+			int k1 = INTARRAYLEAFSIZE / 2 - 1;;
+			RecordId r1 = {(PageId) k1, (SlotId) k1};
+			PageKeyPair<int> newNode = _leafSplitInsertEntry(node, &k1, r1);
+			assert(node->keyArray[INTARRAYLEAFSIZE / 2 - 1] == k1);
+			for (int i = 0; i < INTARRAYLEAFSIZE / 2 - 2;  i++) {
+				assert(node->keyArray[i] == i + 1);
+				assert(node->ridArray[i].slot_number == i + 1);
+			}
+
+			for (int i = INTARRAYLEAFSIZE / 2;  i < INTARRAYLEAFSIZE; i++) {
+				assert(node->keyArray[i] == -1);
+				assert(node->ridArray[i].slot_number == (SlotId) -1);
+			}
+			Page* page;
+			bufMgr->readPage(file, newNode.pageNo, page);
+			LeafNodeInt *newNode1 = reinterpret_cast<LeafNodeInt *>(page);
+			for (int i = 0; i <= INTARRAYLEAFSIZE / 2;  i++) {
+				assert(newNode1->keyArray[i] == INTARRAYLEAFSIZE / 2 + i);
+				assert(newNode1->ridArray[i].slot_number == INTARRAYLEAFSIZE / 2 + i);
+			}
+
+			for (int i = INTARRAYLEAFSIZE / 2 + 1;  i < INTARRAYLEAFSIZE; i++) {
+				assert(newNode1->keyArray[i] == -1);
+				assert(newNode1->ridArray[i].slot_number == (SlotId) -1);
+			}
+		
+			assert(node->rightSibPageNo == newNode.pageNo);
+			assert(newNode1->rightSibPageNo == 756);
+			bufMgr->unPinPage(file, pair.pageNo, false);
+			bufMgr->unPinPage(file, newNode.pageNo, false);
+		}
+
+		{
+			PageIDPair pair = _newLeafNode();
+			LeafNodeInt *node = reinterpret_cast<LeafNodeInt *>(pair.page);
+			node->rightSibPageNo = 756;
+			for (int i = 0; i < INTARRAYLEAFSIZE; i++) {
+				node->keyArray[i] = i + 1;
+				node->ridArray[i] = {1, (SlotId) (i + 1)};
+			}
+			int k1 = INTARRAYLEAFSIZE / 2 + 1;
+			RecordId r1 = {(PageId) k1, (SlotId) k1};
+			PageKeyPair<int> newNode = _leafSplitInsertEntry(node, &k1, r1);
+			for (int i = 0; i < INTARRAYLEAFSIZE / 2;  i++) {
+				assert(node->keyArray[i] == i + 1);
+				assert(node->ridArray[i].slot_number == i + 1);
+			}
+
+			for (int i = INTARRAYLEAFSIZE / 2;  i < INTARRAYLEAFSIZE; i++) {
+				assert(node->keyArray[i] == -1);
+				assert(node->ridArray[i].slot_number == (SlotId) -1);
+			}
+			Page* page;
+			bufMgr->readPage(file, newNode.pageNo, page);
+			LeafNodeInt *newNode1 = reinterpret_cast<LeafNodeInt *>(page);	
+			assert(newNode1->keyArray[0] == k1);
+			for (int i = 1; i <= INTARRAYLEAFSIZE / 2;  i++) {
+				assert(newNode1->keyArray[i] == INTARRAYLEAFSIZE / 2 + i);
+				assert(newNode1->ridArray[i].slot_number == INTARRAYLEAFSIZE / 2 + i);
+			}
+
+			for (int i = INTARRAYLEAFSIZE / 2 + 1;  i < INTARRAYLEAFSIZE; i++) {
+				assert(newNode1->keyArray[i] == -1);
+				assert(newNode1->ridArray[i].slot_number == (SlotId) -1);
+			}
+		
+			assert(node->rightSibPageNo == newNode.pageNo);
+			assert(newNode1->rightSibPageNo == 756);
+			bufMgr->unPinPage(file, pair.pageNo, false);
+			bufMgr->unPinPage(file, newNode.pageNo, false);
+		}
+		{
+			PageIDPair pair = _newLeafNode();
+			LeafNodeInt *node = reinterpret_cast<LeafNodeInt *>(pair.page);
+			node->rightSibPageNo = 756;
+			for (int i = 0; i < INTARRAYLEAFSIZE; i++) {
+				node->keyArray[i] = i + 1;
+				node->ridArray[i] = {1, (SlotId) (i + 1)};
+			}
+			int k1 = 10000;
+			RecordId r1 = {(PageId) k1, (SlotId) k1};
+			PageKeyPair<int> newNode = _leafSplitInsertEntry(node, &k1, r1);
+			for (int i = 0; i < INTARRAYLEAFSIZE / 2;  i++) {
+				assert(node->keyArray[i] == i + 1);
+				assert(node->ridArray[i].slot_number == i + 1);
+			}
+
+			for (int i = INTARRAYLEAFSIZE / 2;  i < INTARRAYLEAFSIZE; i++) {
+				assert(node->keyArray[i] == -1);
+				assert(node->ridArray[i].slot_number == (SlotId) -1);
+			}
+			Page* page;
+			bufMgr->readPage(file, newNode.pageNo, page);
+			LeafNodeInt *newNode1 = reinterpret_cast<LeafNodeInt *>(page);	
+			assert(newNode1->keyArray[INTARRAYLEAFSIZE / 2] == k1);
+			for (int i = 0; i < INTARRAYLEAFSIZE / 2;  i++) {
+				assert(newNode1->keyArray[i] == INTARRAYLEAFSIZE / 2 + i + 1);
+				assert(newNode1->ridArray[i].slot_number == INTARRAYLEAFSIZE / 2 + i + 1);
+			}
+
+			for (int i = INTARRAYLEAFSIZE / 2 + 1;  i < INTARRAYLEAFSIZE; i++) {
+				assert(newNode1->keyArray[i] == -1);
+				assert(newNode1->ridArray[i].slot_number == (SlotId) -1);
+			}
+		
+			assert(node->rightSibPageNo == newNode.pageNo);
+			assert(newNode1->rightSibPageNo == 756);
+			bufMgr->unPinPage(file, pair.pageNo, false);
+			bufMgr->unPinPage(file, newNode.pageNo, false);
+		}
+		std::cout << "test leaf split insert entry passes" << std::endl;
 	}
 }
