@@ -252,6 +252,10 @@ namespace badgerdb
 		newPair.set(newLeaf.pageNo, newNode->keyArray[0]); 
 		newNode->rightSibPageNo = node->rightSibPageNo;
 		node->rightSibPageNo = newLeaf.pageNo;
+
+		_assertLeafInternalConsistency(node);
+		_assertLeafInternalConsistency(newNode);
+
 		bufMgr->unPinPage(file, newPair.pageNo, true);
 		return newPair;
 	}
@@ -261,6 +265,7 @@ namespace badgerdb
 		PageIDPair newSibPair =_newNonLeafNode();
 		NonLeafNodeInt *newSib = reinterpret_cast<NonLeafNodeInt *>(newSibPair.page);
 
+		newSib->level = node->level;
 		PageKeyPair<int> parentEntry;
 
 		int index = 0;
@@ -306,6 +311,9 @@ namespace badgerdb
 			node->keyArray[half] = EMPTY_SLOT;
 			_nonLeafInsertEntry(newSib, pair);
 		}
+
+		_assertNonLeafInternalConsistency(node);
+		_assertNonLeafInternalConsistency(newSib);
 
 		bufMgr->unPinPage(file, newSibPair.pageNo, true);
 		return parentEntry;
@@ -735,7 +743,7 @@ namespace badgerdb
 			assert(newNode->pageNoArray[half - 1] == (PageId)(INTARRAYNONLEAFSIZE));
 			for (int i = half;  i < INTARRAYNONLEAFSIZE; i++) {
 				assert(newNode->keyArray[i] == EMPTY_SLOT);
-				assert(newNode->pageNoArray[i + 1] == EMPTY_SLOT);
+				assert(newNode->pageNoArray[i + 1] == (PageId)EMPTY_SLOT);
 			}
 
 			assert(newNodePair.key == half);
@@ -785,7 +793,7 @@ namespace badgerdb
 			}
 			for (int i = half - 1;  i < INTARRAYNONLEAFSIZE; i++) {
 				assert(newNode->keyArray[i] == EMPTY_SLOT);
-				assert(newNode->pageNoArray[i + 1] == EMPTY_SLOT);
+				assert(newNode->pageNoArray[i + 1] == (PageId)EMPTY_SLOT);
 			}
 
 			assert(newNodePair.key == k1);
@@ -831,7 +839,7 @@ namespace badgerdb
 			assert(newNode->pageNoArray[half - 1] == PageId(9999));
 			for (int i = half - 1;  i < INTARRAYNONLEAFSIZE; i++) {
 				assert(newNode->keyArray[i] == EMPTY_SLOT);
-				assert(newNode->pageNoArray[i + 1] == EMPTY_SLOT);
+				assert(newNode->pageNoArray[i + 1] == PageId(EMPTY_SLOT));
 			}
 
 			assert(newNodePair.key == half + 1);
