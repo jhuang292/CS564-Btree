@@ -394,6 +394,7 @@ class BTreeIndex {
 	const void _leafInsertEntry(LeafNodeInt *node, const void *key,  RecordId rid);
 	const void _nonLeafInsertEntry(NonLeafNodeInt *node, const PageKeyPair<int>);
 	const PageKeyPair<int> _leafSplitInsertEntry(LeafNodeInt *node, const void *key, const RecordId rid);
+	const PageKeyPair<int> _nonLeafSplitInsertEntry(NonLeafNodeInt *node, const PageKeyPair<int> pair);
 	
 	PageIDPair _newLeafNode();
 	PageIDPair _newNonLeafNode();
@@ -409,7 +410,7 @@ class BTreeIndex {
 	const void _testLeafInsertEntry();
 	const void _testNonLeafInsertEntry();
 	const void _testLeafSplitInsertEntry();
-	
+	const void _testNonLeafSplitInsertEntry();
 	
 };
 

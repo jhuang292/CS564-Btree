@@ -256,6 +256,61 @@ namespace badgerdb
 		return newPair;
 	}
 
+	const PageKeyPair<int> BTreeIndex::_nonLeafSplitInsertEntry(NonLeafNodeInt *node, const PageKeyPair<int> pair)
+	{
+		PageIDPair newSibPair =_newNonLeafNode();
+		NonLeafNodeInt *newSib = reinterpret_cast<NonLeafNodeInt *>(newSibPair.page);
+
+		PageKeyPair<int> parentEntry;
+
+		int index = 0;
+		for (; index < INTARRAYNONLEAFSIZE && node->keyArray[index] < pair.key; index++);
+
+		int half = (INTARRAYNONLEAFSIZE + 1) / 2;
+		if (index < half) {
+			for (int i = 0; i < half - 1; i++) {
+				newSib->keyArray[i] = node->keyArray[i + half];
+				newSib->pageNoArray[i] = node->pageNoArray[i + half];
+				node->keyArray[i + half] = EMPTY_SLOT;
+				node->pageNoArray[i + half] = EMPTY_SLOT;
+			}
+			newSib->pageNoArray[half - 1] = node->pageNoArray[INTARRAYNONLEAFSIZE];
+			node->pageNoArray[INTARRAYNONLEAFSIZE] = EMPTY_SLOT;
+
+			parentEntry.set(newSibPair.pageNo, node->keyArray[half - 1]);
+
+			node->keyArray[half - 1] = EMPTY_SLOT;
+			_nonLeafInsertEntry(node, pair);
+		} else if (index == half) {
+			for (int i = 0; i < half - 1; i++) {
+				newSib->keyArray[i] = node->keyArray[i + half];
+				newSib->pageNoArray[i+1] = node->pageNoArray[i + half + 1];
+				node->keyArray[i + half] = EMPTY_SLOT;
+				node->pageNoArray[i + half + 1] = EMPTY_SLOT;
+			}
+			newSib->pageNoArray[0] = pair.pageNo;
+
+			parentEntry.set(newSibPair.pageNo, pair.key);
+		} else {
+			for (int i = 0; i < half - 2; i++) {
+				newSib->keyArray[i] = node->keyArray[i + half + 1];
+				newSib->pageNoArray[i] = node->pageNoArray[i + half + 1];
+				node->keyArray[i + half + 1] = EMPTY_SLOT;
+				node->pageNoArray[i + half + 1] = EMPTY_SLOT;
+			}
+			newSib->pageNoArray[half - 2] = node->pageNoArray[INTARRAYNONLEAFSIZE];
+			node->pageNoArray[INTARRAYNONLEAFSIZE] = EMPTY_SLOT;
+
+			parentEntry.set(newSibPair.pageNo, node->keyArray[half]);
+
+			node->keyArray[half] = EMPTY_SLOT;
+			_nonLeafInsertEntry(newSib, pair);
+		}
+
+		bufMgr->unPinPage(file, newSibPair.pageNo, true);
+		return parentEntry;
+	}
+
 	// -----------------------------------------------------------------------------
 	// BTreeIndex::startScan
 	// -----------------------------------------------------------------------------
@@ -361,6 +416,7 @@ namespace badgerdb
 		_testLeafInsertEntry();
 		_testNonLeafInsertEntry();
 		_testLeafSplitInsertEntry();
+		_testNonLeafSplitInsertEntry();
 	}
 
 	const void BTreeIndex::_testValidateMetaPage()
@@ -633,4 +689,157 @@ namespace badgerdb
 		}
 		std::cout << "test leaf split insert entry passes" << std::endl;
 	}
+	
+
+	const void BTreeIndex::_testNonLeafSplitInsertEntry()
+	{
+		{
+			PageIDPair pair = _newNonLeafNode();
+			NonLeafNodeInt *node = reinterpret_cast<NonLeafNodeInt *>(pair.page);
+			for (int i = 0; i < INTARRAYNONLEAFSIZE; i++) {
+				node->keyArray[i] = i + 1;
+				node->pageNoArray[i + 1] = i + 1;
+			}
+			node->pageNoArray[0] = 0;
+
+			int k1 = 1;
+			const int half = (INTARRAYNONLEAFSIZE + 1) / 2;
+			PageKeyPair<int> pairIn;
+			pairIn.set(k1, k1);
+
+			PageKeyPair<int> newNodePair = _nonLeafSplitInsertEntry(node, pairIn);
+			assert(node->pageNoArray[0] == (PageId)(0));
+
+			assert(node->keyArray[0] == 1);
+			assert(node->pageNoArray[1] == (PageId)(1));
+			
+			for (int i = 1; i < half;  i++) {
+				assert(node->keyArray[i] == i);
+				//std::cout << "expect: " << i << "actual: " << node->pageNoArray[i] << std::endl;
+				assert(node->pageNoArray[i+1] == (PageId)(i));
+			}
+			assert(node->pageNoArray[half] == (PageId)(half - 1));
+			for (int i = half;  i < INTARRAYNONLEAFSIZE; i++) {
+				assert(node->keyArray[i] == EMPTY_SLOT);
+				assert(node->pageNoArray[i+1] == (PageId)(EMPTY_SLOT));
+			}
+
+			Page* page;
+			bufMgr->readPage(file, newNodePair.pageNo, page);
+			NonLeafNodeInt *newNode = reinterpret_cast<NonLeafNodeInt *>(page);	
+			assert(newNode->pageNoArray[0] == PageId(half));
+			for (int i = 0; i < half - 1;  i++) {
+				assert(newNode->keyArray[i] == half + i + 1);
+				assert(newNode->pageNoArray[i + 1] == PageId(half + i + 1));
+			}
+			assert(newNode->pageNoArray[half - 1] == (PageId)(INTARRAYNONLEAFSIZE));
+			for (int i = half;  i < INTARRAYNONLEAFSIZE; i++) {
+				assert(newNode->keyArray[i] == EMPTY_SLOT);
+				assert(newNode->pageNoArray[i + 1] == EMPTY_SLOT);
+			}
+
+			assert(newNodePair.key == half);
+
+			bufMgr->unPinPage(file, pair.pageNo, false);
+			bufMgr->unPinPage(file, newNodePair.pageNo, false);
+		}
+		{
+			const int half = (INTARRAYNONLEAFSIZE + 1) / 2;
+
+			PageIDPair pair = _newNonLeafNode();
+			NonLeafNodeInt *node = reinterpret_cast<NonLeafNodeInt *>(pair.page);
+			for (int i = 0; i < half; i++) {
+				node->keyArray[i] = i + 1;
+				node->pageNoArray[i + 1] = i + 1;
+			}
+			for (int i = half; i < INTARRAYNONLEAFSIZE; i++) {
+				node->keyArray[i] = i + 2;
+				node->pageNoArray[i + 1] = i + 2;
+			}
+			node->pageNoArray[0] = 0;
+
+			int k1 = half + 1;
+			PageKeyPair<int> pairIn;
+			pairIn.set(k1, k1);
+
+			PageKeyPair<int> newNodePair = _nonLeafSplitInsertEntry(node, pairIn);
+			assert(node->pageNoArray[0] == (PageId)(0));
+			for (int i = 0; i < half;  i++) {
+				assert(node->keyArray[i] == i + 1);
+				//std::cout << "expect: " << i << "actual: " << node->pageNoArray[i] << std::endl;
+				assert(node->pageNoArray[i+1] == (PageId)(i + 1));
+			}
+			assert(node->pageNoArray[half] == (PageId)(half));
+			for (int i = half;  i < INTARRAYNONLEAFSIZE; i++) {
+				assert(node->keyArray[i] == EMPTY_SLOT);
+				assert(node->pageNoArray[i+1] == (PageId)(EMPTY_SLOT));
+			}
+
+			Page* page;
+			bufMgr->readPage(file, newNodePair.pageNo, page);
+			NonLeafNodeInt *newNode = reinterpret_cast<NonLeafNodeInt *>(page);	
+			assert(newNode->pageNoArray[0] == PageId(k1));
+			for (int i = 0; i < half - 1;  i++) {
+				assert(newNode->keyArray[i] == half + i + 2);
+				assert(newNode->pageNoArray[i + 1] == PageId(half + i + 2));
+			}
+			for (int i = half - 1;  i < INTARRAYNONLEAFSIZE; i++) {
+				assert(newNode->keyArray[i] == EMPTY_SLOT);
+				assert(newNode->pageNoArray[i + 1] == EMPTY_SLOT);
+			}
+
+			assert(newNodePair.key == k1);
+
+			bufMgr->unPinPage(file, pair.pageNo, false);
+			bufMgr->unPinPage(file, newNodePair.pageNo, false);
+		}		
+		{
+			PageIDPair pair = _newNonLeafNode();
+			NonLeafNodeInt *node = reinterpret_cast<NonLeafNodeInt *>(pair.page);
+			for (int i = 0; i < INTARRAYNONLEAFSIZE; i++) {
+				node->keyArray[i] = i + 1;
+				node->pageNoArray[i + 1] = i + 1;
+			}
+			node->pageNoArray[0] = 0;
+
+			int k1 = 9999;
+			const int half = (INTARRAYNONLEAFSIZE + 1) / 2;
+			PageKeyPair<int> pairIn;
+			pairIn.set(k1, k1);
+
+			PageKeyPair<int> newNodePair = _nonLeafSplitInsertEntry(node, pairIn);
+			assert(node->pageNoArray[0] == (PageId)(0));
+
+			for (int i = 0; i < half;  i++) {
+				assert(node->keyArray[i] == i + 1);
+				assert(node->pageNoArray[i+1] == (PageId)(i + 1));
+			}
+			for (int i = half;  i < INTARRAYNONLEAFSIZE; i++) {
+				assert(node->keyArray[i] == EMPTY_SLOT);
+				assert(node->pageNoArray[i+1] == (PageId)(EMPTY_SLOT));
+			}
+
+			Page* page;
+			bufMgr->readPage(file, newNodePair.pageNo, page);
+			NonLeafNodeInt *newNode = reinterpret_cast<NonLeafNodeInt *>(page);	
+			assert(newNode->pageNoArray[0] == PageId(half + 1));
+			for (int i = 0; i < half - 2;  i++) {
+				assert(newNode->keyArray[i] == half + i + 2);
+				assert(newNode->pageNoArray[i + 1] == PageId(half + i + 2));
+			}
+			assert(newNode->keyArray[half - 2] == 9999);
+			assert(newNode->pageNoArray[half - 1] == PageId(9999));
+			for (int i = half - 1;  i < INTARRAYNONLEAFSIZE; i++) {
+				assert(newNode->keyArray[i] == EMPTY_SLOT);
+				assert(newNode->pageNoArray[i + 1] == EMPTY_SLOT);
+			}
+
+			assert(newNodePair.key == half + 1);
+
+			bufMgr->unPinPage(file, pair.pageNo, false);
+			bufMgr->unPinPage(file, newNodePair.pageNo, false);
+		}
+		std::cout << "test non leaf split insert entry passes" << std::endl;
+	}
+
 }
