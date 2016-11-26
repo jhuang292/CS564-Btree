@@ -66,6 +66,9 @@ namespace badgerdb
 			if (!_validateMetaPage(indexMetaInfo, relationName, attrByteOffset, attrType)) {
 				throw BadIndexInfoException(outIndexName);
 			}
+
+			
+			rootPageNum = indexMetaInfo->rootPageNo;
 		}
 
 		// If the index file does not exist, then a new file is created
@@ -74,6 +77,33 @@ namespace badgerdb
 			// If the file does not exist, a new index file is created
 			file = new BlobFile(outIndexName, true);
 			std::cout << "A new index file is created";// Test output message    
+
+			{
+				PageId pid;
+				IndexMetaInfo *meta;
+				bufMgr->allocPage(file, pid, (Page *&)meta);
+				strncpy((char *)(&(meta->relationName)), relationName.c_str(), 20);
+				meta->relationName[19] = 0;
+				meta->attrByteOffset = attrByteOffset;
+				meta->attrType = attrType;
+
+				{
+					PageIDPair rootResult = _newNonLeafNode();
+					rootPageNum = rootResult.pageNo;
+					NonLeafNodeInt *root = (NonLeafNodeInt *)(rootResult.page);
+					root->level = 1;
+
+					PageIDPair leafResult = _newLeafNode();
+					bufMgr->unPinPage(file, leafResult.pageNo, true);
+					root->pageNoArray[0] = leafResult.pageNo;
+
+					bufMgr->unPinPage(file, rootResult.pageNo, true);
+				}
+
+				meta->rootPageNo = rootPageNum;
+				bufMgr->unPinPage(file, pid, true);
+			}
+			
 
 			// Scan the relationship(using FileScan) 
 			FileScan *myFileScan = new FileScan(relationName, bufMgrIn);
@@ -89,9 +119,10 @@ namespace badgerdb
 
 					// Using getRecord() method to get all the record in the file
 					std::string record = myFileScan -> getRecord();
+					const char *cstr = record.c_str();
 					// std::cout << "My record: " << record << std::endl;
 					// std::cout << outRid.page_number << "   " << outRid.slot_number << "\n";
-
+					insertEntry(cstr + attrByteOffset, outRid);
 				}
 			}
 			catch (EndOfFileException e)
@@ -142,7 +173,71 @@ namespace badgerdb
 
 	const void BTreeIndex::insertEntry(const void *key, const RecordId rid) 
 	{
+		PageKeyPair<int> result = _insertEntryNonLeaf(rootPageNum, key, rid);
+		if (result.pageNo != (PageId)(-1)) {
+			PageIDPair newRootPair = _newNonLeafNode();
+			NonLeafNodeInt *newRoot = (NonLeafNodeInt *)(newRootPair.page);
 
+			newRoot->level = 0;
+			newRoot->keyArray[0] = result.key;
+			newRoot->pageNoArray[0] = rootPageNum;
+			newRoot->pageNoArray[1] = result.pageNo;
+			bufMgr->unPinPage(file, newRootPair.pageNo, true);
+
+			rootPageNum = newRootPair.pageNo;
+		}
+	}
+
+	const PageKeyPair<int> BTreeIndex::_insertEntryNonLeaf(PageId nodeId, const void* key, const RecordId rid)
+	{
+		NonLeafNodeInt *node;
+		bufMgr->readPage(file, nodeId, (Page *&)node);
+		PageKeyPair<int> retVal;
+		retVal.set(-1, -1);
+		bool dirty = false;
+		{
+			int ikey = *((int *)key);
+			int idx = 0;
+			for (;idx < INTARRAYNONLEAFSIZE && node->keyArray[idx] < ikey && node->keyArray[idx] != EMPTY_SLOT; idx++);
+			PageId nextNodeId = node->pageNoArray[idx];
+			PageKeyPair<int> result;
+			if (node->level == 1) {
+				result = _insertEntryLeaf(nextNodeId, key, rid);
+			} else {
+				result = _insertEntryNonLeaf(nextNodeId, key, rid);
+			}
+			if (result.pageNo == PageId(-1)) {
+				goto done;
+			}
+			if (!_nonLeafIsFull(node)) {
+				_nonLeafInsertEntry(node, result);
+			} else {
+				retVal = _nonLeafSplitInsertEntry(node, result);
+			}
+			dirty = true;
+		}
+done:
+		bufMgr->unPinPage(file, nodeId, dirty);
+		return retVal;
+	}
+
+	const PageKeyPair<int> BTreeIndex::_insertEntryLeaf(PageId nodeId, const void* key, const RecordId rid)
+	{
+		LeafNodeInt *node;
+		bufMgr->readPage(file, nodeId, (Page *&)node);
+		PageKeyPair<int> retVal;
+		retVal.set(-1, -1);
+		bool dirty = false;
+		{
+			if (!_leafIsFull(node)) {
+				_leafInsertEntry(node, key, rid);
+			} else {
+				retVal = _leafSplitInsertEntry(node, key, rid);
+			}
+			dirty = true;
+		}
+		bufMgr->unPinPage(file, nodeId, dirty);
+		return retVal;
 	}
 
 	const bool BTreeIndex::_leafIsFull(LeafNodeInt *node)
