@@ -155,10 +155,14 @@ void indexInternalTest()
 
 	BTreeIndex index(relationName, intIndexName, bufMgr, offsetof(tuple,i), INTEGER);
 	index._internalTest();
-	deleteRelation();
+	
+       std::cout << "Here!!!!!!!!!!!!" << std::endl;
+        deleteRelation();
 	try
 	{
+              std::cout << "Here!!!" << std::endl;
 		File::remove(intIndexName);
+                
 	}
 	catch(FileNotFoundException e)
 	{
