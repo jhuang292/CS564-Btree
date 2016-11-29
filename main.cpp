@@ -138,11 +138,11 @@ int main(int argc, char **argv)
 
 	File::remove(relationName);
 
-	indexInternalTest();
-	//test1();
-	//test2();
-	//test3();
-	//errorTests();
+	//indexInternalTest();
+	test1();
+	test2();
+	test3();
+	errorTests();
 
   return 1;
 }
@@ -431,7 +431,9 @@ int intScan(BTreeIndex * index, int lowVal, Operator lowOp, int highVal, Operato
 		try
 		{
 			index->scanNext(scanRid);
+			std::cout << "before" << std::endl;
 			bufMgr->readPage(file1, scanRid.page_number, curPage);
+			std::cout << "after" << std::endl;
 			RECORD myRec = *(reinterpret_cast<const RECORD*>(curPage->getRecord(scanRid).data()));
 			bufMgr->unPinPage(file1, scanRid.page_number, false);
 

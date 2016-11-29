@@ -168,7 +168,7 @@ namespace badgerdb
 
 	BTreeIndex::~BTreeIndex()
 	{
-		std::cout << "in deconstructor, file:" << file << std::endl;
+		//bufMgr->flushFile(file);
 		file->~File();
 	}
 
@@ -182,7 +182,6 @@ namespace badgerdb
 		if (result.pageNo != (PageId)(-1)) {
 			PageIDPair newRootPair = _newNonLeafNode();
 			NonLeafNodeInt *newRoot = (NonLeafNodeInt *)(newRootPair.page);
-
 			newRoot->level = 0;
 			newRoot->keyArray[0] = result.key;
 			newRoot->pageNoArray[0] = rootPageNum;
@@ -190,6 +189,11 @@ namespace badgerdb
 			bufMgr->unPinPage(file, newRootPair.pageNo, true);
 
 			rootPageNum = newRootPair.pageNo;
+
+			IndexMetaInfo *meta;
+			bufMgr->readPage(file, 1, (Page *&)meta);
+			meta->rootPageNo = rootPageNum;
+			bufMgr->unPinPage(file, 1, true);
 		}
 	}
 
@@ -202,8 +206,7 @@ namespace badgerdb
 		bool dirty = false;
 		{
 			int ikey = *((int *)key);
-			int idx = 0;
-			for (;idx < INTARRAYNONLEAFSIZE && node->keyArray[idx] < ikey && node->keyArray[idx] != EMPTY_SLOT; idx++);
+			int idx = _search(node, ikey);
 			PageId nextNodeId = node->pageNoArray[idx];
 			PageKeyPair<int> result;
 			if (node->level == 1) {
@@ -428,7 +431,51 @@ done:
 			const void* highValParm,
 			const Operator highOpParm)
 	{
+		lowValInt = *((int *)lowValParm);
+		highValInt = *((int *)highValParm);
+		lowOp = lowOpParm;
+		highOp = highOpParm;
+		_checkScanParams(lowValInt, lowOpParm, highValInt, highOpParm);
 
+		NonLeafNodeInt *node;
+		LeafNodeInt *leafNode;
+		PageId pageNum = rootPageNum;
+
+		bufMgr->readPage(file, pageNum, (Page *&)node);
+		while (node->level == 0) {
+			const int idx = _search(node, lowValInt);
+			const PageId oldPageNum = pageNum;
+			pageNum = node->pageNoArray[idx];
+			bufMgr->unPinPage(file, oldPageNum, false);
+			bufMgr->readPage(file, pageNum, (Page *&)node);
+		}
+		{
+			const int idx = _search(node, lowValInt);
+			const PageId oldPageNum = pageNum;
+			pageNum = node->pageNoArray[idx];
+			bufMgr->unPinPage(file, oldPageNum, false);
+			bufMgr->readPage(file, pageNum, (Page *&)leafNode);
+		}
+
+		bool found = false;
+
+		for (int idx = 0; idx < INTARRAYLEAFSIZE && leafNode->keyArray[idx] != EMPTY_SLOT; idx++) {
+			const int key = leafNode->keyArray[idx];
+			if (_satisfies(lowValInt, lowOpParm, highValInt, highOpParm, key)) {
+				found = true;
+				currentPageNum = pageNum;	
+				currentPageData = (Page *)leafNode;
+				nextEntry = idx;
+				scanExecuting = true;
+				break;
+			}
+		}
+
+		if (!found) {
+			scanExecuting = false;
+			bufMgr->unPinPage(file, pageNum, false);
+			throw NoSuchKeyFoundException();
+		}
 	}
 
 	// -----------------------------------------------------------------------------
@@ -437,7 +484,46 @@ done:
 
 	const void BTreeIndex::scanNext(RecordId& outRid) 
 	{
+		if (!scanExecuting) {
+			throw ScanNotInitializedException();	
+		}
 
+		LeafNodeInt *node = (LeafNodeInt *)currentPageData;
+
+
+		{
+/*
+			std::cout << "leaf node" << std::endl;
+			std::cout << "next Entry: " << nextEntry << std::endl;
+			std::cout << "next sib:" << node->rightSibPageNo << std::endl;
+			for (int i = 0; i < INTARRAYLEAFSIZE; i++) {
+				std::cout << node->keyArray[i] << ", ";
+			}
+			std::cout << std::endl;
+*/
+		}
+
+		if (nextEntry == INTARRAYLEAFSIZE || node->keyArray[nextEntry] == EMPTY_SLOT) {
+			if (node->rightSibPageNo == (PageId)EMPTY_SLOT) {
+				throw IndexScanCompletedException();
+			}
+			const PageId oldPageNum = currentPageNum;
+			currentPageNum = node->rightSibPageNo;
+			nextEntry = 0;
+			bufMgr->unPinPage(file, oldPageNum, false);
+			bufMgr->readPage(file, currentPageNum, (Page *&)currentPageData);
+			node = (LeafNodeInt *)currentPageData;
+		}
+		
+		const int key = node->keyArray[nextEntry];
+		
+//		std::cout << key << ", "<< nextEntry << std::endl;
+		if (_satisfies(lowValInt, lowOp, highValInt, highOp, key)) {
+			outRid = node->ridArray[nextEntry];
+			nextEntry++;
+		} else {
+			throw IndexScanCompletedException();
+		}
 	}
 
 	// -----------------------------------------------------------------------------
@@ -446,7 +532,48 @@ done:
 	//
 	const void BTreeIndex::endScan() 
 	{
+		if ( !scanExecuting) {
+			throw ScanNotInitializedException();	
+		}
+		bufMgr->unPinPage(file, currentPageNum, false);
 
+		scanExecuting = false;
+		currentPageData = nullptr;
+		currentPageNum = -1;
+		nextEntry = -1;
+	}
+
+	const bool BTreeIndex::_satisfies(int lowVal, const Operator lowOp, int highVal, const Operator highOp, int val)
+	{
+		if (lowOp == GTE && highOp == LTE) {
+			return val >= lowVal && val <= highVal;
+		} else if (lowOp == GT && highOp == LTE) {
+			return val > lowVal && val <= highVal;
+		} else if (lowOp == GTE && highOp == LT) {
+			return val >= lowVal && val < highVal;
+		} else {
+			return val > lowVal && val < highVal;
+		}
+	}
+
+	const void BTreeIndex::_checkScanParams(int lowVal, const Operator lowOp, int highVal, const Operator highOp) 
+	{
+		if (lowOp != GT && lowOp != GTE) {
+			throw BadOpcodesException();
+		}
+		if (highOp != LT && highOp != LTE) {
+			throw BadOpcodesException();
+		}
+		if (lowVal > highVal) {
+			throw BadScanrangeException();
+		}
+	}
+
+	const int BTreeIndex::_search(NonLeafNodeInt *node, int val) 
+	{
+		int idx = 0;
+		for (;idx < INTARRAYNONLEAFSIZE && node->keyArray[idx] < val && node->keyArray[idx] != EMPTY_SLOT; idx++);
+		return idx;
 	}
 
 	const void BTreeIndex::_assertLeafInternalConsistency(LeafNodeInt *node)

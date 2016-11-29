@@ -399,9 +399,12 @@ class BTreeIndex {
 	const PageKeyPair<int> _insertEntryNonLeaf(PageId nodeId, const void* key, const RecordId rid);
 	const PageKeyPair<int> _insertEntryLeaf(PageId nodeId, const void* key, const RecordId rid);
 	
+	const void _checkScanParams(int lowVal, const Operator lowOp, int highVal, const Operator highOp);
 	PageIDPair _newLeafNode();
 	PageIDPair _newNonLeafNode();
 
+	const bool _satisfies(int lowVal, const Operator lowOp, int highVal, const Operator highOp, int val);
+	const int _search(NonLeafNodeInt *node, int val);
 	const void _assertLeafInternalConsistency(LeafNodeInt *);
 	const void _assertNonLeafInternalConsistency(NonLeafNodeInt *);
   /**
