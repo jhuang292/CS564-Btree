@@ -38,6 +38,7 @@ namespace badgerdb
 		std::ostringstream idxStr;
 		idxStr << relationName << '.' << attrByteOffset;
 		outIndexName = idxStr.str(); // indeName is the name of the index file
+		std::cout << "Name of index is: " << outIndexName << std::endl; // output test for the the opened file
 
 		// Declare a page instance
 		Page *page;
@@ -129,6 +130,8 @@ namespace badgerdb
 			{
 				std::cout << "Reach the end of the file." << std::endl;
 			}
+			delete myFileScan;
+			
 		}
 
 
@@ -165,6 +168,8 @@ namespace badgerdb
 
 	BTreeIndex::~BTreeIndex()
 	{
+		std::cout << "in deconstructor, file:" << file << std::endl;
+		file->~File();
 	}
 
 	// -----------------------------------------------------------------------------

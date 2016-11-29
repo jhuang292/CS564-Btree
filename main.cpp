@@ -153,20 +153,21 @@ void indexInternalTest()
 	std::cout << "starting index internal test" << std::endl;
 	createRelationForward();
 
-	BTreeIndex index(relationName, intIndexName, bufMgr, offsetof(tuple,i), INTEGER);
-	index._internalTest();
+	{
+		BTreeIndex index(relationName, intIndexName, bufMgr, offsetof(tuple,i), INTEGER);
+		index._internalTest();
+	}
 	
-       std::cout << "Here!!!!!!!!!!!!" << std::endl;
-        deleteRelation();
-	try
-	{
-              std::cout << "Here!!!" << std::endl;
-		File::remove(intIndexName);
-                
-	}
-	catch(FileNotFoundException e)
-	{
-	}
+       deleteRelation();
+       try
+       {
+
+	       File::remove(intIndexName);
+
+       }
+       catch(FileNotFoundException e)
+       {
+       }
 }
 
 void test1()
