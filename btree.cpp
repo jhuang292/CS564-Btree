@@ -168,7 +168,8 @@ namespace badgerdb
 
 	BTreeIndex::~BTreeIndex()
 	{
-		//bufMgr->flushFile(file);
+		bufMgr->flushFile(file);
+                //delete file;
 		file->~File();
 	}
 
