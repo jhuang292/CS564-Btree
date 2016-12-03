@@ -103,6 +103,7 @@ namespace badgerdb
 				}
 
 				meta->rootPageNo = rootPageNum;
+
 				bufMgr->unPinPage(file, pid, true);
 			}
 			

@@ -484,23 +484,43 @@ void indexTestsNegative()
 void intTests()
 {
   std::cout << "Create a B+ Tree index on the integer field" << std::endl;
-  BTreeIndex index(relationName, intIndexName, bufMgr, offsetof(tuple,i), INTEGER);
+  {
+	// create new index
+	  BTreeIndex index(relationName, intIndexName, bufMgr, offsetof(tuple,i), INTEGER);
 
-	// run some tests
-	checkPassFail(intScan(&index,25,GT,40,LT), 14)
-	checkPassFail(intScan(&index,20,GTE,35,LTE), 16)
-	checkPassFail(intScan(&index,-3,GT,3,LT), 3)
-	checkPassFail(intScan(&index,996,GT,1001,LT), 4)
-	checkPassFail(intScan(&index,0,GT,1,LT), 0)
-	checkPassFail(intScan(&index,300,GT,400,LT), 99)
-	checkPassFail(intScan(&index,3000,GTE,4000,LT), 1000)
+	  // run some tests
+	  checkPassFail(intScan(&index,25,GT,40,LT), 14)
+		  checkPassFail(intScan(&index,20,GTE,35,LTE), 16)
+		  checkPassFail(intScan(&index,-3,GT,3,LT), 3)
+		  checkPassFail(intScan(&index,996,GT,1001,LT), 4)
+		  checkPassFail(intScan(&index,0,GT,1,LT), 0)
+		  checkPassFail(intScan(&index,300,GT,400,LT), 99)
+		  checkPassFail(intScan(&index,3000,GTE,4000,LT), 1000)
+  }
+
+  {
+	// read from existing index
+	  BTreeIndex index2(relationName, intIndexName, bufMgr, offsetof(tuple,i), INTEGER);
+
+	  // run some tests
+	  checkPassFail(intScan(&index2,25,GT,40,LT), 14)
+		  checkPassFail(intScan(&index2,20,GTE,35,LTE), 16)
+		  checkPassFail(intScan(&index2,-3,GT,3,LT), 3)
+		  checkPassFail(intScan(&index2,996,GT,1001,LT), 4)
+		  checkPassFail(intScan(&index2,0,GT,1,LT), 0)
+		  checkPassFail(intScan(&index2,300,GT,400,LT), 99)
+		  checkPassFail(intScan(&index2,3000,GTE,4000,LT), 1000)
+  }
+
 }
 
 void intTestsNegative()
 {
   std::cout << "Create a B+ Tree index on the integer field" << std::endl;
-  BTreeIndex index(relationName, intIndexName, bufMgr, offsetof(tuple,i), INTEGER);
 
+  {
+	// create new index
+  BTreeIndex index(relationName, intIndexName, bufMgr, offsetof(tuple,i), INTEGER);
 	// run some tests
 	checkPassFail(intScan(&index,-40,GT,-25,LT), 14)
 	checkPassFail(intScan(&index,-35,GTE,-20,LTE), 16)
@@ -509,6 +529,20 @@ void intTestsNegative()
 	checkPassFail(intScan(&index,-1,GT,0,LT), 0)
 	checkPassFail(intScan(&index,-400,GT,-300,LT), 99)
 	checkPassFail(intScan(&index,-4000,GTE,-3000,LT), 1000)
+  }
+
+  {
+	// read from existing index
+  BTreeIndex index(relationName, intIndexName, bufMgr, offsetof(tuple,i), INTEGER);
+	// run some tests
+	checkPassFail(intScan(&index,-40,GT,-25,LT), 14)
+	checkPassFail(intScan(&index,-35,GTE,-20,LTE), 16)
+	checkPassFail(intScan(&index,-3,GT,3,LT), 5)
+	checkPassFail(intScan(&index,-1001,GT,-996,LT), 4)
+	checkPassFail(intScan(&index,-1,GT,0,LT), 0)
+	checkPassFail(intScan(&index,-400,GT,-300,LT), 99)
+	checkPassFail(intScan(&index,-4000,GTE,-3000,LT), 1000)
+  }
 }
 
 int intScan(BTreeIndex * index, int lowVal, Operator lowOp, int highVal, Operator highOp)
