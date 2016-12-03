@@ -69,7 +69,7 @@ namespace badgerdb
 				throw BadIndexInfoException(outIndexName);
 			}
 
-			
+
 			rootPageNum = indexMetaInfo->rootPageNo;
 		}
 
@@ -106,7 +106,7 @@ namespace badgerdb
 
 				bufMgr->unPinPage(file, pid, true);
 			}
-			
+
 
 			// Scan the relationship(using FileScan) 
 			FileScan *myFileScan = new FileScan(relationName, bufMgrIn);
@@ -133,7 +133,7 @@ namespace badgerdb
 				std::cout << "Reach the end of the file." << std::endl;
 			}
 			delete myFileScan;
-			
+
 		}
 
 
@@ -171,7 +171,7 @@ namespace badgerdb
 	BTreeIndex::~BTreeIndex()
 	{
 		bufMgr->flushFile(file);
-                //delete file;
+		//delete file;
 		file->~File();
 	}
 
@@ -305,7 +305,7 @@ done:
 				break;
 			}
 		}
-		
+
 		for (int i = emptySlotIdx; i >= 0; i--) {
 			if (i == 0) {
 				node->keyArray[0] = pair.key;
@@ -495,15 +495,15 @@ done:
 
 
 		{
-/*
-			std::cout << "leaf node" << std::endl;
-			std::cout << "next Entry: " << nextEntry << std::endl;
-			std::cout << "next sib:" << node->rightSibPageNo << std::endl;
-			for (int i = 0; i < INTARRAYLEAFSIZE; i++) {
-				std::cout << node->keyArray[i] << ", ";
-			}
-			std::cout << std::endl;
-*/
+			/*
+			   std::cout << "leaf node" << std::endl;
+			   std::cout << "next Entry: " << nextEntry << std::endl;
+			   std::cout << "next sib:" << node->rightSibPageNo << std::endl;
+			   for (int i = 0; i < INTARRAYLEAFSIZE; i++) {
+			   std::cout << node->keyArray[i] << ", ";
+			   }
+			   std::cout << std::endl;
+			 */
 		}
 
 		if (nextEntry == INTARRAYLEAFSIZE || node->keyArray[nextEntry] == EMPTY_SLOT) {
@@ -517,10 +517,10 @@ done:
 			bufMgr->readPage(file, currentPageNum, (Page *&)currentPageData);
 			node = (LeafNodeInt *)currentPageData;
 		}
-		
+
 		const int key = node->keyArray[nextEntry];
-		
-//		std::cout << key << ", "<< nextEntry << std::endl;
+
+		//		std::cout << key << ", "<< nextEntry << std::endl;
 		if (_satisfies(lowValInt, lowOp, highValInt, highOp, key)) {
 			outRid = node->ridArray[nextEntry];
 			nextEntry++;
@@ -620,7 +620,7 @@ done:
 			node->ridArray[i].page_number = (PageId)EMPTY_SLOT;
 			node->ridArray[i].slot_number = (SlotId)EMPTY_SLOT;
 		}
-		
+
 		PageIDPair pair;
 		pair.set(page, pid);
 		return pair;
@@ -800,7 +800,7 @@ done:
 				assert(newNode1->keyArray[i] == EMPTY_SLOT);
 				assert(newNode1->ridArray[i].slot_number == (SlotId) EMPTY_SLOT);
 			}
-		
+
 			assert(node->rightSibPageNo == newNode.pageNo);
 			assert(newNode1->rightSibPageNo == 756);
 			bufMgr->unPinPage(file, pair.pageNo, false);
@@ -840,7 +840,7 @@ done:
 				assert(newNode1->keyArray[i] == EMPTY_SLOT);
 				assert(newNode1->ridArray[i].slot_number == (SlotId) EMPTY_SLOT);
 			}
-		
+
 			assert(node->rightSibPageNo == newNode.pageNo);
 			assert(newNode1->rightSibPageNo == 756);
 			bufMgr->unPinPage(file, pair.pageNo, false);
@@ -880,7 +880,7 @@ done:
 				assert(newNode1->keyArray[i] == EMPTY_SLOT);
 				assert(newNode1->ridArray[i].slot_number == (SlotId) EMPTY_SLOT);
 			}
-		
+
 			assert(node->rightSibPageNo == newNode.pageNo);
 			assert(newNode1->rightSibPageNo == 756);
 			bufMgr->unPinPage(file, pair.pageNo, false);
@@ -919,7 +919,7 @@ done:
 				assert(newNode1->keyArray[i] == EMPTY_SLOT);
 				assert(newNode1->ridArray[i].slot_number == (SlotId) EMPTY_SLOT);
 			}
-		
+
 			assert(node->rightSibPageNo == newNode.pageNo);
 			assert(newNode1->rightSibPageNo == 756);
 			bufMgr->unPinPage(file, pair.pageNo, false);
@@ -927,7 +927,7 @@ done:
 		}
 		std::cout << "test leaf split insert entry passes" << std::endl;
 	}
-	
+
 
 	const void BTreeIndex::_testNonLeafSplitInsertEntry()
 	{
@@ -950,7 +950,7 @@ done:
 
 			assert(node->keyArray[0] == 1);
 			assert(node->pageNoArray[1] == (PageId)(1));
-			
+
 			for (int i = 1; i < half;  i++) {
 				assert(node->keyArray[i] == i);
 				//std::cout << "expect: " << i << "actual: " << node->pageNoArray[i] << std::endl;
