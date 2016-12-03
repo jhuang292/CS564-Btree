@@ -17,7 +17,7 @@
 #include "exceptions/file_not_found_exception.h"
 #include "exceptions/end_of_file_exception.h"
 
-#define EMPTY_SLOT (-1)
+#define EMPTY_SLOT ((1)<<(sizeof(int)*8 - 1))
 
 //#define DEBUG
 
@@ -38,6 +38,7 @@ namespace badgerdb
 		std::ostringstream idxStr;
 		idxStr << relationName << '.' << attrByteOffset;
 		outIndexName = idxStr.str(); // indeName is the name of the index file
+		std::cout << "empty slot is" << EMPTY_SLOT << std::endl; // output test for the the opened file
 		std::cout << "Name of index is: " << outIndexName << std::endl; // output test for the the opened file
 
 		// Declare a page instance
@@ -180,7 +181,7 @@ namespace badgerdb
 	const void BTreeIndex::insertEntry(const void *key, const RecordId rid) 
 	{
 		PageKeyPair<int> result = _insertEntryNonLeaf(rootPageNum, key, rid);
-		if (result.pageNo != (PageId)(-1)) {
+		if (result.pageNo != (PageId)(EMPTY_SLOT)) {
 			PageIDPair newRootPair = _newNonLeafNode();
 			NonLeafNodeInt *newRoot = (NonLeafNodeInt *)(newRootPair.page);
 			newRoot->level = 0;
@@ -203,7 +204,7 @@ namespace badgerdb
 		NonLeafNodeInt *node;
 		bufMgr->readPage(file, nodeId, (Page *&)node);
 		PageKeyPair<int> retVal;
-		retVal.set(-1, -1);
+		retVal.set(EMPTY_SLOT, EMPTY_SLOT);
 		bool dirty = false;
 		{
 			int ikey = *((int *)key);
@@ -215,7 +216,7 @@ namespace badgerdb
 			} else {
 				result = _insertEntryNonLeaf(nextNodeId, key, rid);
 			}
-			if (result.pageNo == PageId(-1)) {
+			if (result.pageNo == PageId(EMPTY_SLOT)) {
 				goto done;
 			}
 			if (!_nonLeafIsFull(node)) {
@@ -235,7 +236,7 @@ done:
 		LeafNodeInt *node;
 		bufMgr->readPage(file, nodeId, (Page *&)node);
 		PageKeyPair<int> retVal;
-		retVal.set(-1, -1);
+		retVal.set(EMPTY_SLOT, EMPTY_SLOT);
 		bool dirty = false;
 		{
 			if (!_leafIsFull(node)) {
@@ -783,8 +784,8 @@ done:
 			}
 
 			for (int i = INTARRAYLEAFSIZE / 2;  i < INTARRAYLEAFSIZE; i++) {
-				assert(node->keyArray[i] == -1);
-				assert(node->ridArray[i].slot_number == (SlotId) -1);
+				assert(node->keyArray[i] == EMPTY_SLOT);
+				assert(node->ridArray[i].slot_number == (SlotId) EMPTY_SLOT);
 			}
 			Page* page;
 			bufMgr->readPage(file, newNode.pageNo, page);
@@ -795,8 +796,8 @@ done:
 			}
 
 			for (int i = INTARRAYLEAFSIZE / 2 + 1;  i < INTARRAYLEAFSIZE; i++) {
-				assert(newNode1->keyArray[i] == -1);
-				assert(newNode1->ridArray[i].slot_number == (SlotId) -1);
+				assert(newNode1->keyArray[i] == EMPTY_SLOT);
+				assert(newNode1->ridArray[i].slot_number == (SlotId) EMPTY_SLOT);
 			}
 		
 			assert(node->rightSibPageNo == newNode.pageNo);
@@ -823,8 +824,8 @@ done:
 			}
 
 			for (int i = INTARRAYLEAFSIZE / 2;  i < INTARRAYLEAFSIZE; i++) {
-				assert(node->keyArray[i] == -1);
-				assert(node->ridArray[i].slot_number == (SlotId) -1);
+				assert(node->keyArray[i] == EMPTY_SLOT);
+				assert(node->ridArray[i].slot_number == (SlotId) EMPTY_SLOT);
 			}
 			Page* page;
 			bufMgr->readPage(file, newNode.pageNo, page);
@@ -835,8 +836,8 @@ done:
 			}
 
 			for (int i = INTARRAYLEAFSIZE / 2 + 1;  i < INTARRAYLEAFSIZE; i++) {
-				assert(newNode1->keyArray[i] == -1);
-				assert(newNode1->ridArray[i].slot_number == (SlotId) -1);
+				assert(newNode1->keyArray[i] == EMPTY_SLOT);
+				assert(newNode1->ridArray[i].slot_number == (SlotId) EMPTY_SLOT);
 			}
 		
 			assert(node->rightSibPageNo == newNode.pageNo);
@@ -862,8 +863,8 @@ done:
 			}
 
 			for (int i = INTARRAYLEAFSIZE / 2;  i < INTARRAYLEAFSIZE; i++) {
-				assert(node->keyArray[i] == -1);
-				assert(node->ridArray[i].slot_number == (SlotId) -1);
+				assert(node->keyArray[i] == EMPTY_SLOT);
+				assert(node->ridArray[i].slot_number == (SlotId) EMPTY_SLOT);
 			}
 			Page* page;
 			bufMgr->readPage(file, newNode.pageNo, page);
@@ -875,8 +876,8 @@ done:
 			}
 
 			for (int i = INTARRAYLEAFSIZE / 2 + 1;  i < INTARRAYLEAFSIZE; i++) {
-				assert(newNode1->keyArray[i] == -1);
-				assert(newNode1->ridArray[i].slot_number == (SlotId) -1);
+				assert(newNode1->keyArray[i] == EMPTY_SLOT);
+				assert(newNode1->ridArray[i].slot_number == (SlotId) EMPTY_SLOT);
 			}
 		
 			assert(node->rightSibPageNo == newNode.pageNo);
@@ -901,8 +902,8 @@ done:
 			}
 
 			for (int i = INTARRAYLEAFSIZE / 2;  i < INTARRAYLEAFSIZE; i++) {
-				assert(node->keyArray[i] == -1);
-				assert(node->ridArray[i].slot_number == (SlotId) -1);
+				assert(node->keyArray[i] == EMPTY_SLOT);
+				assert(node->ridArray[i].slot_number == (SlotId) EMPTY_SLOT);
 			}
 			Page* page;
 			bufMgr->readPage(file, newNode.pageNo, page);
@@ -914,8 +915,8 @@ done:
 			}
 
 			for (int i = INTARRAYLEAFSIZE / 2 + 1;  i < INTARRAYLEAFSIZE; i++) {
-				assert(newNode1->keyArray[i] == -1);
-				assert(newNode1->ridArray[i].slot_number == (SlotId) -1);
+				assert(newNode1->keyArray[i] == EMPTY_SLOT);
+				assert(newNode1->ridArray[i].slot_number == (SlotId) EMPTY_SLOT);
 			}
 		
 			assert(node->rightSibPageNo == newNode.pageNo);

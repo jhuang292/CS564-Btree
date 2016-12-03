@@ -67,13 +67,17 @@ BufMgr * bufMgr = new BufMgr(100);
 void createRelationForward();
 void createRelationBackward();
 void createRelationRandom();
+void createRelationRandomNegative();
 void intTests();
+void intTestsNegative();
 int intScan(BTreeIndex *index, int lowVal, Operator lowOp, int highVal, Operator highOp);
 void indexTests();
+void indexTestsNegative();
 void indexInternalTest();
 void test1();
 void test2();
 void test3();
+void test4();
 void errorTests();
 void deleteRelation();
 
@@ -138,10 +142,11 @@ int main(int argc, char **argv)
 
 	File::remove(relationName);
 
-	//indexInternalTest();
+	indexInternalTest();
 	test1();
 	test2();
 	test3();
+	test4();
 	errorTests();
 
   return 1;
@@ -200,6 +205,17 @@ void test3()
 	std::cout << "createRelationRandom" << std::endl;
 	createRelationRandom();
 	indexTests();
+	deleteRelation();
+}
+
+void test4()
+{
+	// Create a relation with tuples valued 0 to relationSize in random order and perform index tests 
+	// on attributes of all three types (int, double, string)
+	std::cout << "--------------------" << std::endl;
+	std::cout << "createRelationRandomNegative" << std::endl;
+	createRelationRandomNegative();
+	indexTestsNegative();
 	deleteRelation();
 }
 
@@ -365,6 +381,68 @@ void createRelationRandom()
 	file1->writePage(new_page_number, new_page);
 }
 
+void createRelationRandomNegative()
+{
+  // destroy any old copies of relation file
+	try
+	{
+		File::remove(relationName);
+	}
+	catch(FileNotFoundException e)
+	{
+	}
+  file1 = new PageFile(relationName, true);
+
+  // initialize all of record1.s to keep purify happy
+  memset(record1.s, ' ', sizeof(record1.s));
+	PageId new_page_number;
+  Page new_page = file1->allocatePage(new_page_number);
+
+  // insert records in random order
+
+  int arrSize = relationSize * 2 - 1;
+  std::vector<int> intvec(arrSize);
+  for( int i = 0; i < arrSize; i++ )
+  {
+    intvec[i] = i - relationSize + 1;
+  }
+
+  long pos;
+  int val;
+	int i = 0;
+  while( i < arrSize )
+  {
+    pos = random() % (arrSize-i);
+    val = intvec[pos];
+    sprintf(record1.s, "%05d string record", val);
+    record1.i = val;
+    record1.d = val;
+
+    std::string new_data(reinterpret_cast<char*>(&record1), sizeof(RECORD));
+
+		while(1)
+		{
+			try
+			{
+    		new_page.insertRecord(new_data);
+				break;
+			}
+			catch(InsufficientSpaceException e)
+			{
+      	file1->writePage(new_page_number, new_page);
+  			new_page = file1->allocatePage(new_page_number);
+			}
+		}
+
+		int temp = intvec[arrSize-1-i];
+		intvec[arrSize-1-i] = intvec[pos];
+		intvec[pos] = temp;
+		i++;
+  }
+  
+	file1->writePage(new_page_number, new_page);
+}
+
 // -----------------------------------------------------------------------------
 // indexTests
 // -----------------------------------------------------------------------------
@@ -374,6 +452,21 @@ void indexTests()
   if(testNum == 1)
   {
     intTests();
+		try
+		{
+			File::remove(intIndexName);
+		}
+  	catch(FileNotFoundException e)
+  	{
+  	}
+  }
+}
+
+void indexTestsNegative()
+{
+  if(testNum == 1)
+  {
+    intTestsNegative();
 		try
 		{
 			File::remove(intIndexName);
@@ -401,6 +494,21 @@ void intTests()
 	checkPassFail(intScan(&index,0,GT,1,LT), 0)
 	checkPassFail(intScan(&index,300,GT,400,LT), 99)
 	checkPassFail(intScan(&index,3000,GTE,4000,LT), 1000)
+}
+
+void intTestsNegative()
+{
+  std::cout << "Create a B+ Tree index on the integer field" << std::endl;
+  BTreeIndex index(relationName, intIndexName, bufMgr, offsetof(tuple,i), INTEGER);
+
+	// run some tests
+	checkPassFail(intScan(&index,-40,GT,-25,LT), 14)
+	checkPassFail(intScan(&index,-35,GTE,-20,LTE), 16)
+	checkPassFail(intScan(&index,-3,GT,3,LT), 5)
+	checkPassFail(intScan(&index,-1001,GT,-996,LT), 4)
+	checkPassFail(intScan(&index,-1,GT,0,LT), 0)
+	checkPassFail(intScan(&index,-400,GT,-300,LT), 99)
+	checkPassFail(intScan(&index,-4000,GTE,-3000,LT), 1000)
 }
 
 int intScan(BTreeIndex * index, int lowVal, Operator lowOp, int highVal, Operator highOp)
@@ -431,9 +539,7 @@ int intScan(BTreeIndex * index, int lowVal, Operator lowOp, int highVal, Operato
 		try
 		{
 			index->scanNext(scanRid);
-			std::cout << "before" << std::endl;
 			bufMgr->readPage(file1, scanRid.page_number, curPage);
-			std::cout << "after" << std::endl;
 			RECORD myRec = *(reinterpret_cast<const RECORD*>(curPage->getRecord(scanRid).data()));
 			bufMgr->unPinPage(file1, scanRid.page_number, false);
 
